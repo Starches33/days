@@ -1,1 +1,5 @@
 rootProject.name = 'days'
+include 'back'
+include 'telegram'
+include 'database'
+
