@@ -23,6 +23,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1")
 public class UserController {
+
     @Autowired
     private UserRepository userRepository;
 
@@ -41,7 +42,17 @@ public class UserController {
         return ResponseEntity.ok().body(user);
     }
 
-    @PostMapping("/users")
+    @GetMapping("/users/tg/{tgId}")
+    public ResponseEntity<UserEO> getUserByTgId(@PathVariable(value = "tgId")
+                                                      long id) throws ResourceNotFoundException {
+
+        UserEO user = userRepository.findByTgId(id)
+                .orElseThrow(() -> new ResourceNotFoundException
+                        ("User not found for this id :: " + id));
+        return ResponseEntity.ok().body(user);
+    }
+
+    @PostMapping("/users/create")
     public UserEO createUser(@RequestBody UserEO user) {
         return userRepository.save(user);
     }
@@ -55,10 +66,7 @@ public class UserController {
                 .orElseThrow(() -> new ResourceNotFoundException
                         ("User not found for this id :: " + id));
 
-//        user.setEmailId(userDto.getEmailId());
-//        user.setLastName(userDto.getLastName());
-//        user.setFirstName(userDto.getFirstName());
-//        user.setId(id);
+
         final UserEO updateUser = userRepository.save(user);
         return ResponseEntity.ok(updateUser);
     }

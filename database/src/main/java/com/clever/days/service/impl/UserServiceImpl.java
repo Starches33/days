@@ -1,13 +1,12 @@
 package com.clever.days.service.impl;
 
-import com.clever.days.exception.NotFoundException;
+import com.clever.days.entity.UserEO;
 import com.clever.days.mapper.DomUserMapper;
 import com.clever.days.model.User;
 import com.clever.days.repository.UserRepository;
 import com.clever.days.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.UUID;
@@ -35,7 +34,8 @@ public class UserServiceImpl implements UserService {
 
 
     @Override
-    public User createUser(Long tgId, String name) {
-        return null;
+    public void createUser(long tgId, String name) {
+        var createdUser = userRepository.save(new UserEO(UUID.randomUUID(), tgId, name));
+//        return domUserMapper.map(createdUser);
     }
 }

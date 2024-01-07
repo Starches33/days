@@ -25,16 +25,9 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 	implementation 'org.springframework.boot:spring-boot-starter-web'
 //	implementation 'org.liquibase:liquibase-core'
-
-//    compileOnly 'org.projectlombok:lombok'
-//
-//    annotationProcessor 'org.projectlombok:lombok'
-
     implementation group: 'com.squareup.okhttp3', name: 'okhttp', version: '4.11.0'
 
-
     runtimeOnly 'org.postgresql:postgresql'
-
 
     compileOnly "org.projectlombok:lombok:1.18.24"
     annotationProcessor "org.projectlombok:lombok:1.18.24"
@@ -46,4 +39,6 @@ dependencies {
     annotationProcessor "org.mapstruct:mapstruct-processor:1.5.1.Final"
     testAnnotationProcessor "org.mapstruct:mapstruct- processor:1.5.1.Final"
     implementation 'org.projectlombok:lombok-mapstruct-binding:0.2.0'
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
 }

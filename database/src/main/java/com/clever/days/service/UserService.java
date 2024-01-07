@@ -8,5 +8,5 @@ public interface UserService {
 
     User getUserById(UUID id);
 
-    User createUser(Long tgId, String name);
+    void createUser(long tgId, String name);
 }

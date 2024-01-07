@@ -33,7 +33,7 @@ public class UserEO {
     private UUID id;
 
     @Column(name = "tg_id")
-    private Long tgId;
+    private long tgId;
 
     @Column(name = "name")
     private String name;
