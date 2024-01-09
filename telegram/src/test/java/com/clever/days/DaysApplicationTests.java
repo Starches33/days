@@ -1,4 +1,4 @@
-package exchange.bot.clever.days;
+package com.clever.days;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
