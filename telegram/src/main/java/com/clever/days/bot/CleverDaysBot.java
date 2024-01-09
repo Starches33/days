@@ -1,9 +1,11 @@
 package com.clever.days.bot;
 
 import com.clever.days.components.BotCommands;
-import com.clever.days.components.Buttons;
+import com.clever.days.components.Keyboards;
 import com.clever.days.configuration.BotConfig;
-import com.clever.days.service.TgDbService;
+import com.clever.days.service.NoteService;
+import com.clever.days.service.UserService;
+import com.clever.days.util.Enums;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,44 +14,26 @@ import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
-import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup;
-import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardButton;
-import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 @Component
 public class CleverDaysBot extends TelegramLongPollingBot implements BotCommands {
 
     @Autowired
-    private TgDbService tgDbService;
+    private UserService userService;
+
+    @Autowired
+    private NoteService noteService;
 
     final BotConfig config;
 
     private static final Logger log = LoggerFactory.getLogger(CleverDaysBot.class);
 
-    private Map<Long, UserState> userStates = new HashMap<>();
-
-    private enum UserState {
-        STARTED, SAVED, ADDING_TEXT
-    }
-
-    private static final String unknownCommand = "Не удалось распознать команду! Пожалуйста, используйте команды для взаимодействия с ботом.";
-    private static final String helpText = "Чем помочь, сученька?";
-    private static final String startText = "Пиши имя?";
-
     @Value("${bot.username}")
     private String username;
-
-    private static final String start = "/start";
-    private static final String addNote = "/addNote";
-    private static final String getNote = "/getNote";
-    private static final String account = "/account";
-    private static final String help = "/help";
 
     public CleverDaysBot(@Value("${bot.token}") String botToken, BotConfig config) {
         super(botToken);
@@ -59,11 +43,6 @@ public class CleverDaysBot extends TelegramLongPollingBot implements BotCommands
     @Override
     public String getBotUsername() {
         return username;
-    }
-
-    private void clearAndPutSavedUserState(long userId) {
-        userStates.remove(userId);
-        userStates.put(userId, UserState.SAVED);
     }
 
     @Override
@@ -78,11 +57,25 @@ public class CleverDaysBot extends TelegramLongPollingBot implements BotCommands
         }
     }
 
+    private Map<Long, Enums.UserState> userStates = new HashMap<>();
+
+    private Enums.NoteType selectedType;
+
+    private void clearAndPutNewUserState(long userId, Enums.UserState newUserState) {
+        userStates.remove(userId);
+        userStates.put(userId, newUserState);
+    }
+
     public void botAnswerUtils(String receivedMessage, long chatId, long userId, String userName) {
         switch (receivedMessage) {
             case start:
                 sendMessage(chatId, "Hi, " + userName + startText);
-                userStates.put(userId, CleverDaysBot.UserState.STARTED);
+                userStates.put(userId, Enums.UserState.STARTED);
+                break;
+
+            case menu:
+                sendMenuMessage(chatId, null);
+                clearAndPutNewUserState(userId, Enums.UserState.ACTIVE);
                 break;
 
             case help:
@@ -90,8 +83,20 @@ public class CleverDaysBot extends TelegramLongPollingBot implements BotCommands
                 break;
 
             case addNote:
-                sendMessage(chatId, "Пожалуйста, отправьте мне текст заметки");
-                userStates.put(userId, UserState.ADDING_TEXT);
+                var addNoteSendMessage = Keyboards.noteTypeReplyKeyBoardMessage(chatId);
+                executeMessage(addNoteSendMessage);
+                clearAndPutNewUserState(userId, Enums.UserState.SELECTING_NOTE_TYPE);
+                break;
+
+            case getAllNotes:
+                var noteList = noteService.findNoteListByTgId(userId);
+
+                String allNotes = noteList.toString();
+
+                var menuSendMessage = Keyboards.menuReplyKeyBoardMessage(chatId, "Твои заметки: " + allNotes);
+
+                executeMessage(menuSendMessage);
+                clearAndPutNewUserState(userId, Enums.UserState.ACTIVE);
                 break;
 
             default:
@@ -103,7 +108,7 @@ public class CleverDaysBot extends TelegramLongPollingBot implements BotCommands
     }
 
     private void processUserMessage(long userId, long chatId, String message) {
-        UserState state = userStates.get(userId);
+        Enums.UserState state = userStates.get(userId);
 
         if (!userStates.containsKey(userId)) {
             sendMessage(chatId, unknownCommand);
@@ -111,17 +116,28 @@ public class CleverDaysBot extends TelegramLongPollingBot implements BotCommands
         }
 
         switch (state) {
-            //todo сделать условие на количество символов
             case STARTED -> {
+                //todo условие на количество символов
                 startBot(chatId, userId, message);
-                sendReplyKeyBoardMessage(chatId);
-                //        message.setReplyMarkup(Buttons.inlineMarkup());
-                clearAndPutSavedUserState(userId);
+                sendMenuMessage(chatId, null);
+                clearAndPutNewUserState(userId, Enums.UserState.ACTIVE);
             }
-            //todo реализовать сохранение текста
-            case SAVED -> sendMessage(chatId, unknownCommand);
 
-            case ADDING_TEXT -> clearAndPutSavedUserState(userId);
+            case SELECTING_NOTE_TYPE -> {
+                selectedType = Enums.NoteType.valueOf(message);
+                sendMessage(chatId, "Теперь пиши заметку");
+                clearAndPutNewUserState(userId, Enums.UserState.ADDING_TEXT);
+            }
+
+            case ADDING_TEXT -> {
+                //todo условие на количество символов
+                noteService.createNote(userId, message, selectedType, null);
+                sendMenuMessage(chatId, "Заметка успешно создана. Теперь ты в главном меню");
+                clearAndPutNewUserState(userId, Enums.UserState.ACTIVE);
+            }
+
+            //todo реализовать сохранение текста???
+            case ACTIVE -> sendMessage(chatId, unknownCommand);
         }
     }
 
@@ -132,10 +148,7 @@ public class CleverDaysBot extends TelegramLongPollingBot implements BotCommands
 
         executeMessage(message, "Reply on start message sent, start saving user");
 
-        if (tgDbService.findUserByTgId(userId) == null) {
-            //todo Починить сохранение username
-            tgDbService.createUser(userId, userName);
-        }
+        userService.createUser(userId, userName);
     }
 
     private void sendMessage(Long chatId, String text) {
@@ -144,6 +157,12 @@ public class CleverDaysBot extends TelegramLongPollingBot implements BotCommands
         message.setText(text);
 
         executeMessage(message);
+    }
+
+    private void sendMenuMessage(Long chatId, String customText) {
+        var menuSendMessage = Keyboards.menuReplyKeyBoardMessage(chatId, customText);
+
+        executeMessage(menuSendMessage);
     }
 
     private void sendMessage(Long chatId, String text, String logInfo) {
@@ -173,36 +192,5 @@ public class CleverDaysBot extends TelegramLongPollingBot implements BotCommands
         } catch (TelegramApiException e) {
             e.printStackTrace();
         }
-    }
-
-    private void sendReplyKeyBoardMessage(Long chatId) {
-        SendMessage message = new SendMessage();
-        message.setChatId(chatId.toString());
-        message.setText("Ты в главном меню, выберай команду:");
-
-        ReplyKeyboardMarkup keyboardMarkup = new ReplyKeyboardMarkup();
-        List<KeyboardRow> keyboard = new ArrayList<>();
-
-        KeyboardRow row1 = new KeyboardRow();
-        row1.add(new KeyboardButton("/actives"));
-        row1.add(new KeyboardButton("/deals"));
-        row1.add(new KeyboardButton("/analyse"));
-        row1.add(new KeyboardButton("/account"));
-
-        KeyboardRow row2 = new KeyboardRow();
-        row2.add(new KeyboardButton("/addNote"));
-        row2.add(new KeyboardButton("/getNotes"));
-
-        keyboard.add(row1);
-        keyboard.add(row2);
-
-        keyboardMarkup.setKeyboard(keyboard);
-        keyboardMarkup.setResizeKeyboard(true); // Делаем клавиатуру подгоняемой по размеру
-        keyboardMarkup.setOneTimeKeyboard(false); // Клавиатура остается видимой после использования
-        keyboardMarkup.setSelective(true); // Показывать клавиатуру только определенным пользователям
-
-        message.setReplyMarkup(keyboardMarkup);
-
-        executeMessage(message);
     }
 }
